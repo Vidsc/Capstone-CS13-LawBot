@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-cn">
+<head>
+  <meta charset="utf-8"/>
+  <title>LawBot Chat</title>
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <style>
+    body{font-family:system-ui;margin:0;background:#f7f8fb;color:#0f172a}
+    .wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;height:100vh}
+    .header{padding:12px;background:#2563eb;color:#fff;font-weight:bold}
+    .msgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:16px}
+    .msg{max-width:70%;padding:12px;border-radius:12px;white-space:pre-wrap;line-height:1.6}
+    .user{align-self:flex-end;background:#e6f0ff;text-align:right}
+    .bot{align-self:flex-start;background:#f8fafc;border:1px solid #e5e7eb}
+    .sources{font-size:12px;color:#475569;margin-top:6px}
+    .footer{padding:12px;background:#fff;border-top:1px solid #ddd}
+    .footer form{display:flex;gap:8px}
+    textarea{flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;min-height:48px}
+    button{padding:0 16px;border:none;border-radius:8px;background:#2563eb;color:#fff}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">⚖️ LawBot · AI assistance</div>
+
+  <!-- 消息区 -->
+  <div id="msgs" class="msgs">
+    {% for m in history %}
+      {% include "_message.html" with role=m.role content=m.content only %}
+    {% endfor %}
+  </div>
+
+  <!-- 底部输入区 -->
+  <div class="footer">
+    <!-- 发送 -->
+    <form hx-post="{% url 'send_message' %}"
+          hx-target="#msgs"
+          hx-swap="beforeend"
+          hx-disabled-elt="button,#sendBtn"
+          hx-indicator="#loading">
+      {% csrf_token %}
+      <textarea name="message" placeholder="Type your question..." rows="2"></textarea>
+      <input type="hidden" name="top_k" value="5"/>
+      <button id="sendBtn" type="submit">Send</button>
+    </form>
+    <div id="loading" style="display:none; font-size:12px; color:#64748b; margin-top:6px">
+      正在生成…
+    </div>
+
+    <!-- 清空 -->
+    <form hx-post="{% url 'reset_chat' %}"
+          hx-swap="none"
+          hx-indicator="#loadingReset"
+          style="margin-top:6px">
+      {% csrf_token %}
+      <button type="submit" style="background:#dc2626">Clear</button>
+    </form>
+    <div id="loadingReset" style="display:none; font-size:12px; color:#64748b; margin-top:6px">
+      正在清空…
+    </div>
+  </div>
+</div>
+
+<!-- CSRF + 交互增强：A/B/E -->
+<script>
+  // 让 HTMX 自动带上 Django 的 CSRF 头（A）
+  function getCookie(name){
+    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return v ? v.pop() : '';
+  }
+  document.body.addEventListener('htmx:configRequest', (e) => {
+    const token = getCookie('csrftoken');
+    if (token) e.detail.headers['X-CSRFToken'] = token;
+  });
+
+  // 发送成功后清空输入框 + 自动滚到底部（B）
+  document.body.addEventListener('htmx:afterRequest', (e) => {
+    if (e.detail.successful) {
+      const ta = document.querySelector('textarea[name="message"]');
+      if (ta) ta.value = '';
+      const msgs = document.getElementById('msgs');
+      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+    }
+  });
+
+  // 即时插入“用户气泡”，提升体感（E）
+  document.addEventListener('submit', function(e){
+    const form = e.target;
+    // 仅拦截发送表单（URL 以 /send 结尾）
+    const isSend = form.matches('form[hx-post$="send"]') || form.action.endsWith('/send');
+    if (!isSend) return;
+    const ta = form.querySelector('textarea[name="message"]');
+    if (!ta) return;
+    const text = ta.value.trim();
+    if (!text) return;
+
+    const div = document.createElement('div');
+    div.className = 'msg user';
+    div.textContent = text;
+    const msgs = document.getElementById('msgs');
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    // 注意：真正的机器人消息由后端返回后再 append
+  });
+</script>
+</body>
+</html>

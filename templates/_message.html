@@ -1,0 +1,23 @@
+{% if role == 'user' %}
+  <div class="msg user">{{ content }}</div>
+{% else %}
+  <div class="msg bot">
+    {{ content }}
+    {% if sources %}
+      <div class="sources" style="white-space: normal; font-size:12px; color:#475569; margin-top:8px">
+        参考来源：
+        <ul style="margin:6px 0 0; padding-left:18px;">
+          {% for s in sources %}
+            <li style="margin:4px 0;">
+              [{{ forloop.counter }}]
+              <a href="{{ s.source_url }}" target="_blank" style="text-decoration: underline;">
+                {{ s.filename|default_if_none:"未知文件" }}
+              </a>
+              （页 {{ s.page_from }}-{{ s.page_to }}）
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+{% endif %}

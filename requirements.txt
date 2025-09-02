@@ -1,0 +1,12 @@
+fastapi==0.115.2
+uvicorn[standard]==0.30.6
+aiohttp==3.10.5
+beautifulsoup4==4.12.3
+pypdf==5.0.1
+pdfminer.six==20240706
+sentence-transformers==3.0.1
+numpy==1.26.4
+python-dotenv==1.0.1
+tqdm==4.66.5
+psycopg[binary,pool]==3.2.1
+SQLAlchemy==2.0.34
