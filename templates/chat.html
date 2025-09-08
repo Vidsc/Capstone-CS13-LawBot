@@ -6,102 +6,147 @@
   <script src="https://unpkg.com/htmx.org@2.0.3"></script>
   <style>
     body{font-family:system-ui;margin:0;background:#f7f8fb;color:#0f172a}
-    .wrap{max-width:900px;margin:0 auto;display:flex;flex-direction:column;height:100vh}
-    .header{padding:12px;background:#2563eb;color:#fff;font-weight:bold}
+    .wrap{max-width:1100px;margin:0 auto;display:flex;gap:12px;height:100vh;padding:12px}
+    /* 左侧会话栏 */
+    .sidebar{width:280px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;display:flex;flex-direction:column}
+    .side-header{padding:10px 12px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center}
+    .side-header a, .side-header button{padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;text-decoration:none;color:#0f172a;cursor:pointer}
+
+    .sessions{flex:1;overflow:auto; padding:6px 0;}
+    .sessions a.session{
+      display:block;                 /* 关键：块级，独占一行 */
+      padding:10px 12px;
+      border-bottom:1px solid #f1f5f9;
+      text-decoration:none;          /* 关键：去下划线 */
+      color:#0f172a;                 /* 关键：统一颜色 */
+    }
+    .sessions a.session:visited{color:#0f172a;} /* 关键：去“紫色已访问” */
+    .sessions a.session:hover{background:#f8fafc}
+    .sessions a.session.active{background:#eef2ff;border-left:3px solid #6366f1}
+
+
+    /* 右侧聊天区 */
+    .main{flex:1;background:#fff;border:1px solid #e5e7eb;border-radius:12px;display:flex;flex-direction:column}
+    .header{padding:12px;border-bottom:1px solid #e5e7eb;font-weight:600}
     .msgs{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:16px}
     .msg{max-width:70%;padding:12px;border-radius:12px;white-space:pre-wrap;line-height:1.6}
     .user{align-self:flex-end;background:#e6f0ff;text-align:right}
     .bot{align-self:flex-start;background:#f8fafc;border:1px solid #e5e7eb}
     .sources{font-size:12px;color:#475569;margin-top:6px}
-    .footer{padding:12px;background:#fff;border-top:1px solid #ddd}
-    .footer form{display:flex;gap:8px}
-    textarea{flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;min-height:48px}
-    button{padding:0 16px;border:none;border-radius:8px;background:#2563eb;color:#fff}
+
+    .composer{display:flex;gap:8px;padding:12px;border-top:1px solid #e5e7eb}
+    .composer textarea{flex:1;padding:10px;border:1px solid #d1d5db;border-radius:10px;min-height:56px;resize:vertical}
+    .composer button{padding:10px 14px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:10px;cursor:pointer}
+    .danger{background:#dc2626;border-color:#dc2626}
   </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="header">⚖️ LawBot · AI assistance</div>
+  <div class="wrap">
 
-  <!-- 消息区 -->
-  <div id="msgs" class="msgs">
-    {% for m in history %}
-      {% include "_message.html" with role=m.role content=m.content only %}
-    {% endfor %}
+    <!-- 左侧：会话列表 -->
+    <aside class="sidebar">
+      <div class="side-header">
+          <form method="post" action="{% url 'new_chat' %}">
+            {% csrf_token %}
+            <button type="submit">+ 新建会话</button>
+          </form>
+      </div>
+
+      <div class="sessions">
+          {% if sessions %}
+            {% for sid, s in sessions.items %}
+              <a href="{% url 'load_chat' sid %}"
+                 class="session {% if sid == current_id %}active{% endif %}">
+                <div style="font-size:14px">{{ s.title|default:"新会话" }}</div>
+
+                {% if s.history %}
+                  {% with lastmsg=s.history|last %}
+                    <div style="font-size:12px;color:#94a3b8;margin-top:2px">
+                      {{ lastmsg.content|truncatechars:30 }}
+                    </div>
+                  {% endwith %}
+                {% endif %}
+              </a>
+            {% endfor %}
+          {% else %}
+            <div style="padding:12px;color:#94a3b8">暂无会话，点击“新建会话”开始</div>
+          {% endif %}
+        </div>
+
+    </aside>
+
+    <!-- 右侧：聊天区 -->
+    <main class="main">
+      <div class="header">⚖️ LawBot · AI assistance</div>
+
+      <!-- 消息列表 -->
+      <div id="msgs" class="msgs">
+        {% for m in history %}
+          {% include "_message.html" with role=m.role content=m.content sources=m.sources only %}
+        {% empty %}
+          <div style="color:#94a3b8">此会话暂无消息</div>
+        {% endfor %}
+      </div>
+
+      <!-- 输入区 -->
+      <form class="composer"
+            hx-post="{% url 'send_message' %}"
+            hx-target="#msgs"
+            hx-swap="beforeend"
+            hx-disabled-elt="button,#sendBtn"
+            hx-indicator="#loading">
+        {% csrf_token %}
+        <textarea name="message" placeholder="Type your question..." rows="2"></textarea>
+        <input type="hidden" name="top_k" value="5"/>
+        <button id="sendBtn" type="submit">Send</button>
+        <button class="danger" type="button"
+                hx-post="{% url 'reset_chat' %}" hx-swap="none">Clear</button>
+      </form>
+
+      <div id="loading" style="display:none; font-size:12px; color:#64748b; padding:0 12px 12px">
+        正在生成…
+      </div>
+    </main>
   </div>
 
-  <!-- 底部输入区 -->
-  <div class="footer">
-    <!-- 发送 -->
-    <form hx-post="{% url 'send_message' %}"
-          hx-target="#msgs"
-          hx-swap="beforeend"
-          hx-disabled-elt="button,#sendBtn"
-          hx-indicator="#loading">
-      {% csrf_token %}
-      <textarea name="message" placeholder="Type your question..." rows="2"></textarea>
-      <input type="hidden" name="top_k" value="5"/>
-      <button id="sendBtn" type="submit">Send</button>
-    </form>
-    <div id="loading" style="display:none; font-size:12px; color:#64748b; margin-top:6px">
-      正在生成…
-    </div>
-
-    <!-- 清空 -->
-    <form hx-post="{% url 'reset_chat' %}"
-          hx-swap="none"
-          hx-indicator="#loadingReset"
-          style="margin-top:6px">
-      {% csrf_token %}
-      <button type="submit" style="background:#dc2626">Clear</button>
-    </form>
-    <div id="loadingReset" style="display:none; font-size:12px; color:#64748b; margin-top:6px">
-      正在清空…
-    </div>
-  </div>
-</div>
-
-<!-- CSRF + 交互增强：A/B/E -->
-<script>
-  // 让 HTMX 自动带上 Django 的 CSRF 头（A）
-  function getCookie(name){
-    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return v ? v.pop() : '';
-  }
-  document.body.addEventListener('htmx:configRequest', (e) => {
-    const token = getCookie('csrftoken');
-    if (token) e.detail.headers['X-CSRFToken'] = token;
-  });
-
-  // 发送成功后清空输入框 + 自动滚到底部（B）
-  document.body.addEventListener('htmx:afterRequest', (e) => {
-    if (e.detail.successful) {
-      const ta = document.querySelector('textarea[name="message"]');
-      if (ta) ta.value = '';
-      const msgs = document.getElementById('msgs');
-      if (msgs) msgs.scrollTop = msgs.scrollHeight;
+  <!-- CSRF 自动携带 -->
+  <script>
+    function getCookie(name){
+      const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+      return v ? v.pop() : '';
     }
-  });
+    document.body.addEventListener('htmx:configRequest', (e) => {
+      const token = getCookie('csrftoken');
+      if (token) e.detail.headers['X-CSRFToken'] = token;
+    });
 
-  // 即时插入“用户气泡”，提升体感（E）
-  document.addEventListener('submit', function(e){
-    const form = e.target;
-    // 仅拦截发送表单（URL 以 /send 结尾）
-    const isSend = form.matches('form[hx-post$="send"]') || form.action.endsWith('/send');
-    if (!isSend) return;
-    const ta = form.querySelector('textarea[name="message"]');
-    if (!ta) return;
-    const text = ta.value.trim();
-    if (!text) return;
+    // 发送成功后清空输入并滚动到底部
+    document.body.addEventListener('htmx:afterRequest', (e) => {
+      if (e.detail.successful) {
+        const ta = document.querySelector('textarea[name="message"]');
+        if (ta) ta.value = '';
+        const msgs = document.getElementById('msgs');
+        if (msgs) msgs.scrollTop = msgs.scrollHeight;
+      }
+    });
 
-    const div = document.createElement('div');
-    div.className = 'msg user';
-    div.textContent = text;
-    const msgs = document.getElementById('msgs');
-    msgs.appendChild(div);
-    msgs.scrollTop = msgs.scrollHeight;
-    // 注意：真正的机器人消息由后端返回后再 append
-  });
-</script>
+    // 即时把用户文本插入右侧（优化体感）
+    document.addEventListener('submit', function(e){
+      const form = e.target;
+      const isSend = form.matches('form.composer');
+      if (!isSend) return;
+      const ta = form.querySelector('textarea[name="message"]');
+      if (!ta) return;
+      const text = ta.value.trim();
+      if (!text) return;
+
+      const div = document.createElement('div');
+      div.className = 'msg user';
+      div.textContent = text;
+      const msgs = document.getElementById('msgs');
+      msgs.appendChild(div);
+      msgs.scrollTop = msgs.scrollHeight;
+    });
+  </script>
 </body>
 </html>
