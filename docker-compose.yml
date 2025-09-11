@@ -1,8 +1,8 @@
-version: "3.8"
+# docker-compose.yml (如没有就建一个)
 services:
-  db:
-    build: ./db
-    container_name: qld_rs_pg
+  pg:
+    image: pgvector/pgvector:pg16
+    container_name: lawbot-pg
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -10,5 +10,6 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
